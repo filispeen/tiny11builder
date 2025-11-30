@@ -35,7 +35,8 @@ param (
 
 if (-not $SCRATCH) {
     $ScratchDisk = $PSScriptRoot -replace '[\\]+$', ''
-} else {
+}
+else {
     $ScratchDisk = $SCRATCH + ":"
 }
 
@@ -50,21 +51,23 @@ function Set-RegistryValue {
     try {
         & 'reg' 'add' $path '/v' $name '/t' $type '/d' $value '/f' | Out-Null
         Write-Output "Set registry value: $path\$name"
-    } catch {
+    }
+    catch {
         Write-Output "Error setting registry value: $_"
     }
 }
 
 function Remove-RegistryValue {
     param (
-		[string]$path
-	)
-	try {
-		& 'reg' 'delete' $path '/f' | Out-Null
-		Write-Output "Removed registry value: $path"
-	} catch {
-		Write-Output "Error removing registry value: $_"
-	}
+        [string]$path
+    )
+    try {
+        & 'reg' 'delete' $path '/f' | Out-Null
+        Write-Output "Removed registry value: $path"
+    }
+    catch {
+        Write-Output "Error removing registry value: $_"
+    }
 }
 
 #---------[ Execution ]---------#
@@ -74,7 +77,8 @@ if ((Get-ExecutionPolicy) -eq 'Restricted') {
     $response = Read-Host
     if ($response -eq 'yes') {
         Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Confirm:$false
-    } else {
+    }
+    else {
         Write-Output "The script cannot be run without changing the execution policy. Exiting..."
         exit
     }
@@ -83,11 +87,10 @@ if ((Get-ExecutionPolicy) -eq 'Restricted') {
 # Check and run the script as admin if required
 $adminSID = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-544")
 $adminGroup = $adminSID.Translate([System.Security.Principal.NTAccount])
-$myWindowsID=[System.Security.Principal.WindowsIdentity]::GetCurrent()
-$myWindowsPrincipal=new-object System.Security.Principal.WindowsPrincipal($myWindowsID)
-$adminRole=[System.Security.Principal.WindowsBuiltInRole]::Administrator
-if (! $myWindowsPrincipal.IsInRole($adminRole))
-{
+$myWindowsID = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+$myWindowsPrincipal = new-object System.Security.Principal.WindowsPrincipal($myWindowsID)
+$adminRole = [System.Security.Principal.WindowsBuiltInRole]::Administrator
+if (! $myWindowsPrincipal.IsInRole($adminRole)) {
     Write-Output "Restarting Tiny11 image creator as admin in a new window, you can close this one."
     $newProcess = new-object System.Diagnostics.ProcessStartInfo "PowerShell";
     $newProcess.Arguments = $myInvocation.MyCommand.Definition;
@@ -112,13 +115,15 @@ New-Item -ItemType Directory -Force -Path "$ScratchDisk\tiny11\sources" | Out-Nu
 do {
     if (-not $ISO) {
         $DriveLetter = Read-Host "Please enter the drive letter for the Windows 11 image"
-    } else {
+    }
+    else {
         $DriveLetter = $ISO
     }
     if ($DriveLetter -match '^[c-zC-Z]$') {
         $DriveLetter = $DriveLetter + ":"
         Write-Output "Drive letter set to $DriveLetter"
-    } else {
+    }
+    else {
         Write-Output "Invalid drive letter. Please enter a letter between C and Z."
     }
 } while ($DriveLetter -notmatch '^[c-zC-Z]:$')
@@ -131,7 +136,8 @@ if ((Test-Path "$DriveLetter\sources\boot.wim") -eq $false -or (Test-Path "$Driv
         Write-Output ' '
         Write-Output 'Converting install.esd to install.wim. This may take a while...'
         Export-WindowsImage -SourceImagePath $DriveLetter\sources\install.esd -SourceIndex $index -DestinationImagePath $ScratchDisk\tiny11\sources\install.wim -Compressiontype Maximum -CheckIntegrity
-    } else {
+    }
+    else {
         Write-Output "Can't find Windows OS Installation files in the specified Drive Letter.."
         Write-Output "Please enter the correct DVD Drive Letter.."
         exit
@@ -157,9 +163,10 @@ $wimFilePath = "$ScratchDisk\tiny11\sources\install.wim"
 & icacls $wimFilePath "/grant" "$($adminGroup.Value):(F)"
 try {
     Set-ItemProperty -Path $wimFilePath -Name IsReadOnly -Value $false -ErrorAction Stop
-} catch {
+}
+catch {
     # This block will catch the error and suppress it.
-	Write-Error "$wimFilePath not found"
+    Write-Error "$wimFilePath not found"
 }
 New-Item -ItemType Directory -Force -Path "$ScratchDisk\scratchdir" > $null
 Mount-WindowsImage -ImagePath $ScratchDisk\tiny11\sources\install.wim -Index $index -Path $ScratchDisk\scratchdir
@@ -170,7 +177,8 @@ $languageLine = $imageIntl -split '\n' | Where-Object { $_ -match 'Default syste
 if ($languageLine) {
     $languageCode = $Matches[1]
     Write-Output "Default system UI language code: $languageCode"
-} else {
+}
+else {
     Write-Output "Default system UI language code not found."
 }
 
@@ -179,7 +187,7 @@ $lines = $imageInfo -split '\r?\n'
 
 foreach ($line in $lines) {
     if ($line -like '*Architecture : *') {
-        $architecture = $line -replace 'Architecture : ',''
+        $architecture = $line -replace 'Architecture : ', ''
         # If the architecture is x64, replace it with amd64
         if ($architecture -eq 'x64') {
             $architecture = 'amd64'
@@ -195,12 +203,102 @@ if (-not $architecture) {
 
 Write-Output "Mounting complete! Performing removal of applications..."
 
-$packages = & 'dism' '/English' "/image:$($ScratchDisk)\scratchdir" '/Get-ProvisionedAppxPackages' |
-    ForEach-Object {
-        if ($_ -match 'PackageName : (.*)') {
-            $matches[1]
+if (-not (Test-Path -Path $PSScriptRoot\exes -PathType Container)) {
+    New-Item -Path $PSScriptRoot\exes -ItemType Directory
+    Write-Host "Folder '$PSScriptRoot\exes' created successfully."
+}
+
+if (-not (Test-Path -Path $PSScriptRoot\redists -PathType Container)) {
+    New-Item -Path $PSScriptRoot\redists -ItemType Directory
+    Write-Host "Folder '$PSScriptRoot\redists' created successfully."
+} 
+
+if (-not (Test-Path -Path $ScratchDisk\scratchdir\Windows\Setup\installers\exe -PathType Container)) {
+    New-Item -Path $ScratchDisk\scratchdir\Windows\Setup\installers\exe\redists -ItemType Directory -Force
+    New-Item -Path $ScratchDisk\scratchdir\Windows\Setup\installers\exe\other -ItemType Directory -Force
+    Write-Host "Folder '$ScratchDisk\scratchdir\Windows\Setup\installers\exe' created successfully."
+} 
+
+$downloadPATH = "$PSScriptRoot\redists"
+
+$redists = @(
+    "Microsoft.VCRedist.2005.x64",
+    "Microsoft.VCRedist.2005.x86",
+    "Microsoft.VCRedist.2008.x64",
+    "Microsoft.VCRedist.2008.x86",
+    "Microsoft.VCRedist.2010.x64",
+    "Microsoft.VCRedist.2010.x86",
+    "Microsoft.VCRedist.2012.x64",
+    "Microsoft.VCRedist.2012.x86",
+    "Microsoft.VCRedist.2013.x64",
+    "Microsoft.VCRedist.2013.x86",
+    "Microsoft.VCRedist.2015+.x64",
+    "Microsoft.VCRedist.2015+.x86"
+)
+
+$redistNames = @(
+    "vcredist2005(x64).exe",
+    "vcredist2005(x86).exe",
+    "vcredist2008(x64).exe",
+    "vcredist2008(x86).exe",
+    "vcredist2010(x64).exe",
+    "vcredist2010(x86).exe",
+    "vcredist2012(x64).exe",
+    "vcredist2012(x86).exe",
+    "vcredist2013(x64).exe",
+    "vcredist2013(x86).exe",
+    "vcredist2015+(x64).exe",
+    "vcredist2015+(x86).exe"
+)
+
+$total = $redists.Count
+$i = 0
+
+Write-Progress -Activity "Dependency downloader" -Status "Initializing..."
+Start-Sleep -Seconds 1
+
+foreach ($redist in $redists) {
+    $i++
+
+    $expectedName = $redistNames[$i - 1]
+    $expectedPath = Join-Path $downloadPATH $expectedName
+
+    Write-Progress -Activity "Dependency downloader" `
+        -Status "Processing $redist ($i of $total)" `
+        -PercentComplete (($i / $total) * 100)
+
+    if (-not (Test-Path $expectedPath)) {
+
+        $output = & winget download -e --id $redist -d $downloadPATH `
+            --accept-package-agreements --accept-source-agreements 2>&1
+
+        if ($output) {
+            Write-Host "$($output[-1]) as $expectedName"
+        }
+
+        $downloadedFile = Get-ChildItem -Path $downloadPATH -Filter *.exe |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+
+        if ($downloadedFile) {
+            Rename-Item -Path $downloadedFile.FullName -NewName $expectedName -Force
         }
     }
+
+    Write-Progress -Activity "Dependency downloader" `
+        -Status "Completed $i of $total" `
+        -PercentComplete (($i / $total) * 100)
+}
+
+Remove-Item -Path "$downloadPATH\*.yaml" -Force -ErrorAction SilentlyContinue
+Copy-Item -Path "$downloadPATH\*.exe" -Destination "$ScratchDisk\scratchdir\Windows\Setup\installers\exe\redists" -Force
+
+$packages = & 'dism' '/English' "/image:$($ScratchDisk)\scratchdir" '/Get-ProvisionedAppxPackages' |
+ForEach-Object {
+    if ($_ -match 'PackageName : (.*)') {
+        $matches[1]
+    }
+}
 
 $packagePrefixes = 'AppUp.IntelManagementandSecurityStatus',
 'Clipchamp.Clipchamp', 
@@ -240,10 +338,6 @@ $packagePrefixes = 'AppUp.IntelManagementandSecurityStatus',
 'Microsoft.WindowsMaps',
 'Microsoft.WindowsSoundRecorder',
 'Microsoft.WindowsTerminal',
-'Microsoft.Xbox.TCUI',
-'Microsoft.XboxApp',
-'Microsoft.XboxGameOverlay',
-'Microsoft.XboxGamingOverlay',
 'Microsoft.XboxIdentityProvider',
 'Microsoft.XboxSpeechToTextOverlay',
 'Microsoft.YourPhone',
@@ -260,9 +354,25 @@ $packagesToRemove = $packages | Where-Object {
     $packageName = $_
     $packagePrefixes -contains ($packagePrefixes | Where-Object { $packageName -like "*$_*" })
 }
+
+$total = $packagesToRemove.Count
+$i = 0
+Write-Progress -Activity "Package removal" -Status "Initializing..."
+
+Start-Sleep -Seconds 1
 foreach ($package in $packagesToRemove) {
-    & 'dism' '/English' "/image:$($ScratchDisk)\scratchdir" '/Remove-ProvisionedAppxPackage' "/PackageName:$package"
+    $i++
+    
+    $output = & 'dism' '/English' "/image:$($ScratchDisk)\scratchdir" '/Remove-ProvisionedAppxPackage' "/PackageName:$package" 2>&1
+    
+    if ($output) {
+        Write-Host $output[-1]
+    }
+    Write-Progress -Activity "Package removal" -Status "Removing $package ($i of $total)" -PercentComplete (($i / $total) * 100)
 }
+
+Write-Progress -Activity "Package removal" -Completed -Status "All packages removed."
+Start-Sleep -Seconds 1
 
 Write-Output "Removing Edge:"
 Remove-Item -Path "$ScratchDisk\scratchdir\Program Files (x86)\Microsoft\Edge" -Recurse -Force | Out-Null
@@ -276,6 +386,11 @@ Write-Output "Removing OneDrive:"
 & 'icacls' "$ScratchDisk\scratchdir\Windows\System32\OneDriveSetup.exe" '/grant' "$($adminGroup.Value):(F)" '/T' '/C' | Out-Null
 Remove-Item -Path "$ScratchDisk\scratchdir\Windows\System32\OneDriveSetup.exe" -Force | Out-Null
 Write-Output "Removal complete!"
+Write-Output "Copying own exes into new build:"
+foreach ($file in Get-ChildItem "$PSScriptRoot\exes" -Filter *.exe) {
+    Write-Host "Will be copied: $($file.Name)"
+}
+Copy-Item "$PSScriptRoot\exes\*.exe" -Destination "$ScratchDisk\scratchdir\Windows\System32" -Force
 Start-Sleep -Seconds 2
 Clear-Host
 Write-Output "Loading registry..."
@@ -284,69 +399,22 @@ reg load HKLM\zDEFAULT $ScratchDisk\scratchdir\Windows\System32\config\default |
 reg load HKLM\zNTUSER $ScratchDisk\scratchdir\Users\Default\ntuser.dat | Out-Null
 reg load HKLM\zSOFTWARE $ScratchDisk\scratchdir\Windows\System32\config\SOFTWARE | Out-Null
 reg load HKLM\zSYSTEM $ScratchDisk\scratchdir\Windows\System32\config\SYSTEM | Out-Null
-Write-Output "Bypassing system requirements(on the system image):"
-Set-RegistryValue 'HKLM\zDEFAULT\Control Panel\UnsupportedHardwareNotificationCache' 'SV1' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zDEFAULT\Control Panel\UnsupportedHardwareNotificationCache' 'SV2' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\Control Panel\UnsupportedHardwareNotificationCache' 'SV1' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\Control Panel\UnsupportedHardwareNotificationCache' 'SV2' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zSYSTEM\Setup\LabConfig' 'BypassCPUCheck' 'REG_DWORD' '1'
-Set-RegistryValue 'HKLM\zSYSTEM\Setup\LabConfig' 'BypassRAMCheck' 'REG_DWORD' '1'
-Set-RegistryValue 'HKLM\zSYSTEM\Setup\LabConfig' 'BypassSecureBootCheck' 'REG_DWORD' '1'
-Set-RegistryValue 'HKLM\zSYSTEM\Setup\LabConfig' 'BypassStorageCheck' 'REG_DWORD' '1'
-Set-RegistryValue 'HKLM\zSYSTEM\Setup\LabConfig' 'BypassTPMCheck' 'REG_DWORD' '1'
-Set-RegistryValue 'HKLM\zSYSTEM\Setup\MoSetup' 'AllowUpgradesWithUnsupportedTPMOrCPU' 'REG_DWORD' '1'
 Write-Output "Disabling Sponsored Apps:"
-Set-RegistryValue 'HKLM\zNTUSER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'OemPreInstalledAppsEnabled' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'PreInstalledAppsEnabled' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'SilentInstalledAppsEnabled' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\CloudContent' 'DisableWindowsConsumerFeatures' 'REG_DWORD' '1'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'ContentDeliveryAllowed' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zSOFTWARE\Microsoft\PolicyManager\current\device\Start' 'ConfigureStartPins' 'REG_SZ' '{"pinnedList": [{}]}'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'FeatureManagementEnabled' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'PreInstalledAppsEverEnabled' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'SoftLandingEnabled' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'SubscribedContentEnabled' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'SubscribedContent-310093Enabled' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'SubscribedContent-338388Enabled' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'SubscribedContent-338389Enabled' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'SubscribedContent-338393Enabled' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'SubscribedContent-353694Enabled' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'SubscribedContent-353696Enabled' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' 'SystemPaneSuggestionsEnabled' 'REG_DWORD' '0'
 Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\PushToInstall' 'DisablePushToInstall' 'REG_DWORD' '1'
 Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\MRT' 'DontOfferThroughWUAU' 'REG_DWORD' '1'
-Remove-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager\Subscriptions'
-Remove-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager\SuggestedApps'
 Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\CloudContent' 'DisableConsumerAccountStateContent' 'REG_DWORD' '1'
-Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\CloudContent' 'DisableCloudOptimizedContent' 'REG_DWORD' '1'
-Write-Output "Enabling Local Accounts on OOBE:"
-Set-RegistryValue 'HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\OOBE' 'BypassNRO' 'REG_DWORD' '1'
 Copy-Item -Path "$PSScriptRoot\autounattend.xml" -Destination "$ScratchDisk\scratchdir\Windows\System32\Sysprep\autounattend.xml" -Force | Out-Null
 
 Write-Output "Disabling Reserved Storage:"
 Set-RegistryValue 'HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager' 'ShippedWithReserves' 'REG_DWORD' '0'
-Write-Output "Disabling BitLocker Device Encryption"
-Set-RegistryValue 'HKLM\zSYSTEM\ControlSet001\Control\BitLocker' 'PreventDeviceEncryption' 'REG_DWORD' '1'
 Write-Output "Disabling Chat icon:"
 Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\Windows Chat' 'ChatIcon' 'REG_DWORD' '3'
 Set-RegistryValue 'HKLM\zNTUSER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'TaskbarMn' 'REG_DWORD' '0'
 Write-Output "Removing Edge related registries"
-Remove-RegistryValue "HKEY_LOCAL_MACHINE\zSOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft Edge"
-Remove-RegistryValue "HKEY_LOCAL_MACHINE\zSOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft Edge Update"
+Remove-RegistryValue "HKLM\zSOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft Edge"
+Remove-RegistryValue "HKLM\zSOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft Edge Update"
 Write-Output "Disabling OneDrive folder backup"
 Set-RegistryValue "HKLM\zSOFTWARE\Policies\Microsoft\Windows\OneDrive" "DisableFileSyncNGSC" "REG_DWORD" "1"
-Write-Output "Disabling Telemetry:"
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo' 'Enabled' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\Privacy' 'TailoredExperiencesWithDiagnosticDataEnabled' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Speech_OneCore\Settings\OnlineSpeechPrivacy' 'HasAccepted' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Input\TIPC' 'Enabled' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\InputPersonalization' 'RestrictImplicitInkCollection' 'REG_DWORD' '1'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\InputPersonalization' 'RestrictImplicitTextCollection' 'REG_DWORD' '1'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\InputPersonalization\TrainedDataStore' 'HarvestContacts' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zNTUSER\Software\Microsoft\Personalization\Settings' 'AcceptedPrivacyPolicy' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\DataCollection' 'AllowTelemetry' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zSYSTEM\ControlSet001\Services\dmwappushservice' 'Start' 'REG_DWORD' '4'
-## Prevents installation of DevHome and Outlook
 Write-Output "Prevents installation of DevHome and Outlook:"
 Set-RegistryValue 'HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Orchestrator\UScheduler_Oobe\OutlookUpdate' 'workCompleted' 'REG_DWORD' '1'
 Set-RegistryValue 'HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Orchestrator\UScheduler\OutlookUpdate' 'workCompleted' 'REG_DWORD' '1'
@@ -417,12 +485,6 @@ Set-RegistryValue 'HKLM\zDEFAULT\Control Panel\UnsupportedHardwareNotificationCa
 Set-RegistryValue 'HKLM\zDEFAULT\Control Panel\UnsupportedHardwareNotificationCache' 'SV2' 'REG_DWORD' '0'
 Set-RegistryValue 'HKLM\zNTUSER\Control Panel\UnsupportedHardwareNotificationCache' 'SV1' 'REG_DWORD' '0'
 Set-RegistryValue 'HKLM\zNTUSER\Control Panel\UnsupportedHardwareNotificationCache' 'SV2' 'REG_DWORD' '0'
-Set-RegistryValue 'HKLM\zSYSTEM\Setup\LabConfig' 'BypassCPUCheck' 'REG_DWORD' '1'
-Set-RegistryValue 'HKLM\zSYSTEM\Setup\LabConfig' 'BypassRAMCheck' 'REG_DWORD' '1'
-Set-RegistryValue 'HKLM\zSYSTEM\Setup\LabConfig' 'BypassSecureBootCheck' 'REG_DWORD' '1'
-Set-RegistryValue 'HKLM\zSYSTEM\Setup\LabConfig' 'BypassStorageCheck' 'REG_DWORD' '1'
-Set-RegistryValue 'HKLM\zSYSTEM\Setup\LabConfig' 'BypassTPMCheck' 'REG_DWORD' '1'
-Set-RegistryValue 'HKLM\zSYSTEM\Setup\MoSetup' 'AllowUpgradesWithUnsupportedTPMOrCPU' 'REG_DWORD' '1'
 Write-Output "Tweaking complete!"
 
 Write-Output "Unmounting Registry..."
@@ -445,7 +507,8 @@ $localOSCDIMGPath = "$PSScriptRoot\oscdimg.exe"
 if ([System.IO.Directory]::Exists($ADKDepTools)) {
     Write-Output "Will be using oscdimg.exe from system ADK."
     $OSCDIMG = "$ADKDepTools\oscdimg.exe"
-} else {
+}
+else {
     Write-Output "ADK folder not found. Will be using bundled oscdimg.exe."
     $url = "https://msdl.microsoft.com/download/symbols/oscdimg.exe/3D44737265000/oscdimg.exe"
 
@@ -455,18 +518,20 @@ if ([System.IO.Directory]::Exists($ADKDepTools)) {
 
         if (Test-Path $localOSCDIMGPath) {
             Write-Output "oscdimg.exe downloaded successfully."
-        } else {
+        }
+        else {
             Write-Error "Failed to download oscdimg.exe."
             exit 1
         }
-    } else {
+    }
+    else {
         Write-Output "oscdimg.exe already exists locally."
     }
 
     $OSCDIMG = $localOSCDIMGPath
 }
 
-& "$OSCDIMG" '-m' '-o' '-u2' '-udfver102' "-bootdata:2#p0,e,b$ScratchDisk\tiny11\boot\etfsboot.com#pEF,e,b$ScratchDisk\tiny11\efi\microsoft\boot\efisys.bin" "$ScratchDisk\tiny11" "$PSScriptRoot\tiny11.iso"
+& "$OSCDIMG" '-m' '-o' '-u2' '-udfver102' "-bootdata:2#p0,e,b$ScratchDisk\tiny11\boot\etfsboot.com#pEF,e,b$ScratchDisk\tiny11\efi\microsoft\boot\efisys.bin" "$ScratchDisk\tiny11" "$PSScriptRoot\tiny11 x64 FILISPEEns build.iso"
 
 # Finishing up
 Write-Output "Creation completed! Press any key to exit the script..."
@@ -479,19 +544,19 @@ Get-Volume -DriveLetter $DriveLetter[0] | Get-DiskImage | Dismount-DiskImage
 Write-Output "Iso drive ejected"
 Write-Output "Removing oscdimg.exe..."
 Remove-Item -Path "$PSScriptRoot\oscdimg.exe" -Force -ErrorAction SilentlyContinue
-Write-Output "Removing autounattend.xml..."
-Remove-Item -Path "$PSScriptRoot\autounattend.xml" -Force -ErrorAction SilentlyContinue
 
-Write-Output "Cleanup check :"
+Write-Output "Cleanup check:"
 if (Test-Path -Path "$ScratchDisk\tiny11") {
     Write-Output "tiny11 folder still exists. Attempting to remove it again..."
     Remove-Item -Path "$ScratchDisk\tiny11" -Recurse -Force -ErrorAction SilentlyContinue
     if (Test-Path -Path "$ScratchDisk\tiny11") {
         Write-Output "Failed to remove tiny11 folder."
-    } else {
+    }
+    else {
         Write-Output "tiny11 folder removed successfully."
     }
-} else {
+}
+else {
     Write-Output "tiny11 folder does not exist. No action needed."
 }
 if (Test-Path -Path "$ScratchDisk\scratchdir") {
@@ -499,10 +564,12 @@ if (Test-Path -Path "$ScratchDisk\scratchdir") {
     Remove-Item -Path "$ScratchDisk\scratchdir" -Recurse -Force -ErrorAction SilentlyContinue
     if (Test-Path -Path "$ScratchDisk\scratchdir") {
         Write-Output "Failed to remove scratchdir folder."
-    } else {
+    }
+    else {
         Write-Output "scratchdir folder removed successfully."
     }
-} else {
+}
+else {
     Write-Output "scratchdir folder does not exist. No action needed."
 }
 if (Test-Path -Path "$PSScriptRoot\oscdimg.exe") {
@@ -510,22 +577,13 @@ if (Test-Path -Path "$PSScriptRoot\oscdimg.exe") {
     Remove-Item -Path "$PSScriptRoot\oscdimg.exe" -Force -ErrorAction SilentlyContinue
     if (Test-Path -Path "$PSScriptRoot\oscdimg.exe") {
         Write-Output "Failed to remove oscdimg.exe."
-    } else {
+    }
+    else {
         Write-Output "oscdimg.exe removed successfully."
     }
-} else {
-    Write-Output "oscdimg.exe does not exist. No action needed."
 }
-if (Test-Path -Path "$PSScriptRoot\autounattend.xml") {
-    Write-Output "autounattend.xml still exists. Attempting to remove it again..."
-    Remove-Item -Path "$PSScriptRoot\autounattend.xml" -Force -ErrorAction SilentlyContinue
-    if (Test-Path -Path "$PSScriptRoot\autounattend.xml") {
-        Write-Output "Failed to remove autounattend.xml."
-    } else {
-        Write-Output "autounattend.xml removed successfully."
-    }
-} else {
-    Write-Output "autounattend.xml does not exist. No action needed."
+else {
+    Write-Output "oscdimg.exe does not exist. No action needed."
 }
 
 # Stop the transcript
